@@ -1,0 +1,125 @@
+#!/bin/bash
+
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+
+DIR=$1
+
+function msg() {
+    echo "# $1" >&2
+}
+
+if [[ -z "$DIR" ]] ; then
+    msg "ERROR: Project directory must be supplied as a first parameter"
+    exit 1
+fi
+
+
+if [[ -d "$DIR" ]] ; then
+    DIR="`(cd $DIR; pwd)`"
+    msg "Using project directory: $DIR"
+else
+    msg "ERROR: Project directory not found: $DIR"
+    exit 1
+fi
+
+
+if [[ -f "$DIR/.project" ]] ; then
+    msg "ERROR: Project alredy has .project file"
+    exit 1
+fi
+
+
+NAME="`basename $DIR`"
+msg "Using project name: $NAME"
+
+
+cat > "$DIR/.project" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<projectDescription>
+        <name>$NAME</name>
+        <comment></comment>
+        <projects>
+        </projects>
+        <buildSpec>
+        </buildSpec>
+        <natures>
+                <nature>org.eclipse.jdt.core.javanature</nature>
+        </natures>
+</projectDescription>
+EOF
+
+function declareSrcClasspathBySubdir() {
+    if [[ -d "$DIR/$1" ]] ; then
+        for f in `ls -1 "$DIR/$1"` ; do
+            echo "    <classpathentry kind=\"src\" path=\"$1/$f\"/>"
+            msg "Declaring source folder: $1/$f"
+        done
+    fi
+}
+function declareSrcClasspathByDir() {
+    if [[ -d "$DIR/$1" ]] ; then
+        echo "    <classpathentry kind=\"src\" path=\"$1\"/>"
+        msg "Declaring source folder: $1"
+    fi
+}
+
+function declareIvyClasspath() {
+    IVY=ivy.xml
+    if [[ -f $DIR/$IVY ]] ; then
+        echo "    <classpathentry kind=\"con\" path=\"org.apache.ivyde.eclipse.cpcontainer.IVYDE_CONTAINER/?ivyXmlPath=$IVY&amp;confs=*\"/>"
+        msg "Declaring ivy classpath using file: $IVY"
+    elif [[ -f $DIR/etc/$IVY ]] ; then
+        echo "    <classpathentry kind=\"con\" path=\"org.apache.ivyde.eclipse.cpcontainer.IVYDE_CONTAINER/?ivyXmlPath=etc/$IVY&amp;confs=*\"/>"
+        msg "Declaring ivy classpath using file: etc/$IVY"
+    else
+        msg "Ivy file not found."
+    fi
+}
+function declareOutClasspath() {
+    msg "Output classpath entry not declared"
+}
+function declareVMClasspath() {
+    VMTYPE=J2SE-1.5
+    echo "    <classpathentry kind=\"con\" path=\"org.eclipse.jdt.launching.JRE_CONTAINER/org.eclipse.jdt.internal.debug.ui.launcher.StandardVMType/${VMTYPE}\"/>"
+    msg "Declaring VM classpath using VM: $VMTYPE"
+}
+function declareJBIClasspath() {
+    if [[ -d sa ]] ; then
+        msg "Declaring classpaths for JBI Service assembly: sa"
+        declareSrcClasspathBySubdir sa/src/main
+        declareSrcClasspathBySubdir sa/src/test
+    fi
+    for su in `ls -1d su-* 2>/dev/null` ; do
+        msg "Declaring classpaths for JBI ServiceUnit: $su"
+        declareSrcClasspathBySubdir $su/src/main
+        declareSrcClasspathBySubdir $su/src/test
+    done
+}
+(
+    echo '<?xml version="1.0" encoding="UTF-8"?>'
+    echo '<classpath>'
+    declareVMClasspath
+    declareIvyClasspath
+    declareSrcClasspathBySubdir src/main
+    declareSrcClasspathBySubdir src/test
+    declareSrcClasspathByDir src/java
+    declareJBIClasspath
+    declareOutClasspath
+    echo '</classpath>'
+) > "$DIR/.classpath"
+
