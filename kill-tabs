@@ -19,6 +19,6 @@
 
 for f in $* ; do
     echo "# Processing $f"
-    sed -i "s/\t/   /g" $f
+    sed -i "s/\t/    /g" $f
 done
 echo "# Done."
